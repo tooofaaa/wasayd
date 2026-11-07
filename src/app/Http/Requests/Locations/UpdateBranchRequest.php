@@ -1,0 +1,30 @@
+<?php
+
+namespace App\Http\Requests\Locations;
+use App\Http\Requests\Concerns\AuthorizesRequests;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+class UpdateBranchRequest extends FormRequest
+{
+    use AuthorizesRequests;
+    public function authorize(): bool
+    {
+        return $this->authorizePermission('locations.view');
+    }
+
+    public function rules(): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:255'],
+            'name_ar' => ['nullable', 'string', 'max:255'],
+            'code' => ['required', 'string', 'max:50', Rule::unique('branches')->ignore($this->branch)],
+            'address' => ['nullable', 'string', 'max:500'],
+            'city' => ['nullable', 'string', 'max:100'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'manager_name' => ['nullable', 'string', 'max:255'],
+            'is_active' => ['boolean'],
+        ];
+    }
+}
