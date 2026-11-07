@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { router, usePage, Link } from '@inertiajs/vue3'
 import { useI18n } from 'vue-i18n'
 import {
@@ -57,9 +57,19 @@ const { t, locale } = useI18n()
 const page = usePage()
 
 const user = computed(() => page.props.auth?.user as any)
-const currentPath = computed(() => window.location.pathname)
+
+// Reactive currentPath that updates on navigation
+const currentPath = ref(window.location.pathname)
+watch(
+    () => page.url,
+    () => {
+        currentPath.value = window.location.pathname
+    },
+    { immediate: true }
+)
 
 const isDark = ref(document.documentElement.classList.contains('dark'))
+const isRtl = computed(() => document.documentElement.dir === 'rtl' || locale.value === 'ar')
 
 function toggleTheme() {
     isDark.value = !isDark.value
@@ -202,8 +212,51 @@ const navigation = computed<NavGroup[]>(() => [
     },
 ])
 
+const SIDEBAR_GROUPS_KEY = 'wasayd_sidebar_groups'
+
+function loadExpandedGroups(): Record<string, boolean> {
+    try {
+        const stored = localStorage.getItem(SIDEBAR_GROUPS_KEY)
+        if (stored) {
+            return JSON.parse(stored)
+        }
+    } catch (e) {
+        console.warn('Failed to load expanded groups from localStorage', e)
+    }
+    return {}
+}
+
+function saveExpandedGroups(groups: Record<string, boolean>) {
+    try {
+        localStorage.setItem(SIDEBAR_GROUPS_KEY, JSON.stringify(groups))
+    } catch (e) {
+        console.warn('Failed to save expanded groups to localStorage', e)
+    }
+}
+
+const expandedGroups = ref<Record<string, boolean>>(loadExpandedGroups())
+
+watch(expandedGroups, (newVal) => {
+    saveExpandedGroups(newVal)
+}, { deep: true })
+
+onMounted(() => {
+    expandedGroups.value = { ...loadExpandedGroups(), ...expandedGroups.value }
+})
+
 function isGroupActive(group: NavGroup): boolean {
     return group.items.some((item) => currentPath.value.startsWith(item.href))
+}
+
+function isGroupExpanded(group: NavGroup): boolean {
+    if (expandedGroups.value[group.label] !== undefined) {
+        return expandedGroups.value[group.label]
+    }
+    return isGroupActive(group)
+}
+
+function toggleGroup(label: string) {
+    expandedGroups.value[label] = !expandedGroups.value[label]
 }
 </script>
 
@@ -246,6 +299,7 @@ function isGroupActive(group: NavGroup): boolean {
 
                     <Collapsible
                         v-else
+                        v-model:open="expandedGroups[group.label]"
                         :default-open="isGroupActive(group)"
                         class="group/collapsible"
                     >
@@ -253,11 +307,20 @@ function isGroupActive(group: NavGroup): boolean {
                             <SidebarGroupLabel as-child>
                                 <CollapsibleTrigger
                                     class="flex w-full items-center gap-2"
+                                    @click="toggleGroup(group.label)"
                                 >
                                     <component :is="group.icon" class="h-4 w-4" />
-                                    <span class="flex-1 text-start">{{ group.label }}</span>
+                                    <span
+                                        class="flex-1 text-start"
+                                        :class="isRtl ? 'text-end' : 'text-start'"
+                                    >{{ group.label }}</span>
                                     <ChevronDown
-                                        class="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180"
+                                        :class="[
+                                            'h-4 w-4 transition-transform',
+                                            isRtl
+                                                ? 'group-data-[state=open]/collapsible:-rotate-180'
+                                                : 'group-data-[state=open]/collapsible:rotate-180',
+                                        ]"
                                     />
                                 </CollapsibleTrigger>
                             </SidebarGroupLabel>
@@ -273,7 +336,9 @@ function isGroupActive(group: NavGroup): boolean {
                                                 :is-active="currentPath.startsWith(item.href)"
                                             >
                                                 <Link :href="item.href">
-                                                    <span>{{ item.label }}</span>
+                                                    <span
+                                                        :class="isRtl ? 'text-end' : 'text-start'"
+                                                    >{{ item.label }}</span>
                                                 </Link>
                                             </SidebarMenuButton>
                                         </SidebarMenuItem>
@@ -306,7 +371,7 @@ function isGroupActive(group: NavGroup): boolean {
                                     </div>
                                 </SidebarMenuButton>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" class="w-56">
+                            <DropdownMenuContent align="start" class="w-56" :dir="isRtl ? 'rtl' : 'ltr'">
                                 <DropdownMenuItem @click="toggleLocale">
                                     <Languages class="me-2 h-4 w-4" />
                                     {{ locale === 'ar' ? 'English' : 'العربية' }}
@@ -334,6 +399,7 @@ function isGroupActive(group: NavGroup): boolean {
             <!-- Top bar -->
             <header
                 class="flex h-14 items-center gap-2 border-b bg-background px-4"
+                :class="isRtl ? 'flex-row-reverse' : ''"
             >
                 <SidebarTrigger />
                 <Separator orientation="vertical" class="mx-2 h-6" />

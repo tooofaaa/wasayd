@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import { useI18n } from 'vue-i18n'
 import { ScrollArea } from '@/Components/ui/scroll-area'
@@ -21,6 +21,7 @@ import {
     FileText,
     ChevronDown,
     ChevronRight,
+    ChevronLeft,
     Package,
     Tag,
     Ruler,
@@ -50,12 +51,14 @@ import {
 } from 'lucide-vue-next'
 
 const emit = defineEmits<{ navigate: [] }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const page = usePage()
 
 const currentRoute = computed(() => {
     try { return route().current() } catch { return '' }
 })
+
+const isRtl = computed(() => document.documentElement.dir === 'rtl' || locale.value === 'ar')
 
 interface NavItem {
     label: string
@@ -170,7 +173,37 @@ const groups: NavGroup[] = [
     },
 ]
 
-const expandedGroups = ref<Record<string, boolean>>({})
+const EXPANDED_GROUPS_KEY = 'wasayd_sidebar_expanded_groups'
+
+function loadExpandedGroups(): Record<string, boolean> {
+    try {
+        const stored = localStorage.getItem(EXPANDED_GROUPS_KEY)
+        if (stored) {
+            return JSON.parse(stored)
+        }
+    } catch (e) {
+        console.warn('Failed to load expanded groups from localStorage', e)
+    }
+    return {}
+}
+
+function saveExpandedGroups(groups: Record<string, boolean>) {
+    try {
+        localStorage.setItem(EXPANDED_GROUPS_KEY, JSON.stringify(groups))
+    } catch (e) {
+        console.warn('Failed to save expanded groups to localStorage', e)
+    }
+}
+
+const expandedGroups = ref<Record<string, boolean>>(loadExpandedGroups())
+
+watch(expandedGroups, (newVal) => {
+    saveExpandedGroups(newVal)
+}, { deep: true })
+
+onMounted(() => {
+    expandedGroups.value = { ...loadExpandedGroups(), ...expandedGroups.value }
+})
 
 function isActive(routeName: string) {
     return currentRoute.value === routeName
@@ -246,10 +279,12 @@ function routeExists(name: string): boolean {
                             <component :is="group.icon" class="h-4 w-4" />
                             {{ t(group.label) }}
                         </div>
-                        <ChevronDown v-if="isExpanded(group)" class="h-4 w-4" />
-                        <ChevronRight v-else class="h-4 w-4" />
+                        <ChevronDown v-if="isExpanded(group) && !isRtl" class="h-4 w-4" />
+                        <ChevronRight v-if="isExpanded(group) && isRtl" class="h-4 w-4" />
+                        <ChevronRight v-if="!isExpanded(group) && !isRtl" class="h-4 w-4" />
+                        <ChevronLeft v-if="!isExpanded(group) && isRtl" class="h-4 w-4" />
                     </button>
-                    <div v-if="isExpanded(group)" class="mt-1 space-y-1 ps-4">
+                    <div v-if="isExpanded(group)" class="mt-1 space-y-1" :class="isRtl ? 'pe-4' : 'ps-4'">
                         <template v-for="item in group.items" :key="item.route">
                             <Link
                                 v-if="item.route && routeExists(item.route)"
