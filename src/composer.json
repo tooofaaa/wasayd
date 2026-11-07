@@ -73,7 +73,11 @@
     },
     "extra": {
         "laravel": {
-            "dont-discover": []
+            "dont-discover": [
+                "laravel/horizon",
+                "laravel/telescope",
+                "barryvdh/laravel-debugbar"
+            ]
         }
     },
     "config": {

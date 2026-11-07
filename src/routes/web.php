@@ -206,3 +206,28 @@ Route::get('/test/simple', function () {
 Route::get('/test/session', function () {
     return 'Session ID: ' . session()->getId() . ' | Has user: ' . (session()->has('login_web_59ba36addc2b2f9401580f014c7f58ea4e30989d') ? 'yes' : 'no');
 });
+
+// Test auth route (authenticated, no Inertia)
+Route::middleware('auth')->get('/test/auth', function () {
+    return response()->json([
+        'user' => auth()->user()->email,
+        'role' => auth()->user()->getRoleNames()->first(),
+        'timestamp' => now()->toIso8601String(),
+    ]);
+});
+
+// PING test - smallest possible authenticated route
+Route::middleware('auth')->get('/test/ping', function () {
+    return 'pong:' . auth()->id();
+});
+
+// Test dashboard data (no Inertia render, just JSON)
+Route::middleware('auth')->get('/test/dashboard-data', function () {
+    $user = auth()->user();
+    return response()->json([
+        'user_id' => $user->id,
+        'company_id' => $user->company_id,
+        'items' => \App\Models\Item::where('company_id', $user->company_id)->count(),
+        'timestamp' => now()->toIso8601String(),
+    ]);
+});

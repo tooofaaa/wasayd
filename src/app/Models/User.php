@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\Concerns\BelongsToCompany;
 use App\Models\Concerns\HasAuditTrail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +12,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, SoftDeletes, HasRoles, HasAuditTrail, BelongsToCompany;
+    use HasFactory, Notifiable, SoftDeletes, HasRoles, HasAuditTrail;
 
     protected $fillable = [
         'company_id', 'branch_id', 'name', 'name_ar', 'email', 'password',

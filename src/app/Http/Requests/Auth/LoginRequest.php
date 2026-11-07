@@ -2,16 +2,13 @@
 
 namespace App\Http\Requests\Auth;
 
-use App\Http\Requests\Concerns\AuthorizesRequests;
 use Illuminate\Foundation\Http\FormRequest;
 
 class LoginRequest extends FormRequest
 {
-    use AuthorizesRequests;
-
     public function authorize(): bool
     {
-        return $this->authorizePermission('auth.login');
+        return true; // Login form is public — no auth required
     }
 
     public function rules(): array
