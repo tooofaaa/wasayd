@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\CompanyController;
+use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SystemConfigController;
 use App\Http\Controllers\Admin\UserController;
@@ -51,6 +53,8 @@ Route::middleware('auth')->group(function () {
     Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('users', UserController::class)->except(['show']);
         Route::resource('roles', RoleController::class)->except(['show']);
+        Route::resource('companies', CompanyController::class)->except(['show']);
+        Route::resource('permissions', PermissionController::class)->except(['show']);
         Route::get('config', [SystemConfigController::class, 'index'])->name('config.index');
         Route::put('config', [SystemConfigController::class, 'update'])->name('config.update');
         Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
