@@ -1,0 +1,45 @@
+<?php
+
+return [
+    // حالات المخزون
+    'total_stock'       => 'إجمالي المخزون',
+    'available'         => 'متاح',
+    'reserved'          => 'محجوز',
+    'quarantined'       => 'تحت الحجر',
+    'damaged'           => 'تالف',
+    'expired'           => 'منتهي الصلاحية',
+    'in_transit'        => 'قيد النقل',
+    'low_stock'         => 'مخزون منخفض',
+    'out_of_stock'      => 'نفاد المخزون',
+    'expiring_soon'     => 'ينتهي قريباً',
+    // بيانات الصنف
+    'item_code'         => 'رمز الصنف',
+    'item_name'         => 'اسم الصنف',
+    'item_type'         => 'نوع الصنف',
+    'category'          => 'الفئة',
+    'uom'               => 'وحدة القياس',
+    'batch_number'      => 'رقم الدفعة',
+    'expiry_date'       => 'تاريخ انتهاء الصلاحية',
+    'serial_number'     => 'الرقم التسلسلي',
+    'epc'               => 'كود المنتج الإلكتروني (EPC)',
+    'location'          => 'الموقع',
+    'warehouse'         => 'المستودع',
+    'quantity'          => 'الكمية',
+    // حركات المخزون
+    'receiving'         => 'الاستلام',
+    'putaway'           => 'التخزين في الموقع',
+    'issue'             => 'الصرف',
+    'transfer'          => 'النقل',
+    'return'            => 'المرتجع',
+    'adjustment'        => 'التسوية',
+    'stock_count'       => 'جرد المخزون',
+    'reconciliation'    => 'مطابقة المخزون',
+    // الضوابط
+    'fefo'              => 'أول انتهاء صلاحية — أول صرف (FEFO)',
+    'batch_controlled'  => 'خاضع لرقابة الدفعة',
+    'serial_controlled' => 'خاضع للرقم التسلسلي',
+    'rfid_enabled'      => 'مفعَّل بتقنية RFID',
+    'storage_condition' => 'شرط التخزين',
+    'cold_chain'        => 'سلسلة التبريد',
+    'controlled_substance' => 'مادة خاضعة للرقابة',
+];

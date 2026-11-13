@@ -1,0 +1,45 @@
+<?php
+
+return [
+    // Stock status labels
+    'total_stock'       => 'Total Stock',
+    'available'         => 'Available',
+    'reserved'          => 'Reserved',
+    'quarantined'       => 'Quarantined',
+    'damaged'           => 'Damaged',
+    'expired'           => 'Expired',
+    'in_transit'        => 'In Transit',
+    'low_stock'         => 'Low Stock',
+    'out_of_stock'      => 'Out of Stock',
+    'expiring_soon'     => 'Expiring Soon',
+    // Item master attributes
+    'item_code'         => 'Item Code',
+    'item_name'         => 'Item Name',
+    'item_type'         => 'Item Type',
+    'category'          => 'Category',
+    'uom'               => 'Unit of Measure',
+    'batch_number'      => 'Batch Number',
+    'expiry_date'       => 'Expiry Date',
+    'serial_number'     => 'Serial Number',
+    'epc'               => 'EPC',
+    'location'          => 'Location',
+    'warehouse'         => 'Warehouse',
+    'quantity'          => 'Quantity',
+    // Inventory transactions
+    'receiving'         => 'Receiving',
+    'putaway'           => 'Put Away',
+    'issue'             => 'Issue',
+    'transfer'          => 'Transfer',
+    'return'            => 'Return',
+    'adjustment'        => 'Adjustment',
+    'stock_count'       => 'Stock Count',
+    'reconciliation'    => 'Reconciliation',
+    // Controls
+    'fefo'              => 'FEFO (First Expired, First Out)',
+    'batch_controlled'  => 'Batch Controlled',
+    'serial_controlled' => 'Serial Controlled',
+    'rfid_enabled'      => 'RFID Enabled',
+    'storage_condition' => 'Storage Condition',
+    'cold_chain'        => 'Cold Chain',
+    'controlled_substance' => 'Controlled Substance',
+];

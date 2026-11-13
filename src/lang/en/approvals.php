@@ -1,0 +1,28 @@
+<?php
+
+return [
+    'approval_required'  => 'Approval Required',
+    'pending_approvals'  => 'Pending Approvals',
+    'approve'            => 'Approve',
+    'reject'             => 'Reject',
+    'delegate'           => 'Delegate',
+    'escalate'           => 'Escalate',
+    'approved'           => 'Approved',
+    'rejected'           => 'Rejected',
+    'escalated'          => 'Escalated',
+    'workflow_type_single'     => 'Single Approver',
+    'workflow_type_multi'      => 'Multi-Approver',
+    'workflow_type_dual'       => 'Dual Control',
+    'workflow_type_sequential' => 'Sequential Approval',
+    'sod_violation'      => 'Segregation of Duties Violation',
+    'witness_required'   => 'Witness Required',
+    'initiator'          => 'Initiator',
+    'witness'            => 'Witness',
+    'comment'            => 'Comment',
+    'reason'             => 'Reason',
+    'decision'           => 'Decision',
+    'approval_matrix'    => 'Approval Matrix',
+    'threshold'          => 'Threshold',
+    'step'               => 'Step',
+    'approver'           => 'Approver',
+];

@@ -1,0 +1,28 @@
+<?php
+
+return [
+    'approval_required'  => 'يتطلب اعتماداً',
+    'pending_approvals'  => 'الاعتمادات المعلّقة',
+    'approve'            => 'اعتماد',
+    'reject'             => 'رفض',
+    'delegate'           => 'تفويض',
+    'escalate'           => 'تصعيد',
+    'approved'           => 'تمت الموافقة',
+    'rejected'           => 'تم الرفض',
+    'escalated'          => 'تم التصعيد',
+    'workflow_type_single'     => 'معتمِد منفرد',
+    'workflow_type_multi'      => 'اعتماد متعدد المعتمِدين',
+    'workflow_type_dual'       => 'رقابة مزدوجة',
+    'workflow_type_sequential' => 'موافقة تسلسلية',
+    'sod_violation'      => 'انتهاك مبدأ الفصل بين المهام',
+    'witness_required'   => 'يتطلب شاهداً',
+    'initiator'          => 'منشئ الطلب',
+    'witness'            => 'الشاهد',
+    'comment'            => 'تعليق',
+    'reason'             => 'السبب',
+    'decision'           => 'القرار',
+    'approval_matrix'    => 'مصفوفة الاعتماد',
+    'threshold'          => 'حد الصلاحية',
+    'step'               => 'الخطوة',
+    'approver'           => 'المعتمِد',
+];

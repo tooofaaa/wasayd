@@ -1,22 +1,35 @@
 services:
+  # ─── Laravel PHP-FPM ──────────────────────────────────────────────────
   app:
     build:
       context: ./docker/php
       dockerfile: Dockerfile
-    platform: linux/arm64
     container_name: wasayd-app
     restart: unless-stopped
     working_dir: /var/www/html
+    environment:
+      APP_ENV: local
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: wasayd
+      DB_USERNAME: wasayd
+      DB_PASSWORD: wasayd_pass_2024
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     volumes:
       - ./src:/var/www/html
     depends_on:
-      mysql:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - wasayd-net
 
+  # ─── Nginx reverse proxy ──────────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
     container_name: wasayd-nginx
@@ -30,32 +43,203 @@ services:
       - app
     networks:
       - wasayd-net
-
-  mysql:
-    image: mysql:8.0
-    platform: linux/arm64
-    container_name: wasayd-mysql
-    restart: unless-stopped
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: wasayd_root_2024
-      MYSQL_DATABASE: wasayd
-      MYSQL_USER: wasayd
-      MYSQL_PASSWORD: wasayd_pass_2024
-    volumes:
-      - wasayd-mysql-data:/var/lib/mysql
-      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
-    command: --default-authentication-plugin=caching_sha2_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pwasayd_root_2024"]
-      interval: 10s
+      test: ["CMD", "wget", "-qO-", "http://localhost/api/health"]
+      interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # ─── Queue workers ────────────────────────────────────────────────────
+  queue:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: wasayd-queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=90
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_DATABASE: wasayd
+      DB_USERNAME: wasayd
+      DB_PASSWORD: wasayd_pass_2024
+      REDIS_HOST: redis
+    volumes:
+      - ./src:/var/www/html
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - wasayd-net
 
+  queue-rfid:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: wasayd-queue-rfid
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work --queue=rfid --sleep=1 --tries=3 --timeout=30
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_DATABASE: wasayd
+      DB_USERNAME: wasayd
+      DB_PASSWORD: wasayd_pass_2024
+      REDIS_HOST: redis
+    volumes:
+      - ./src:/var/www/html
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - wasayd-net
+
+  # ─── Scheduler ────────────────────────────────────────────────────────
+  scheduler:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: wasayd-scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan schedule:work
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_DATABASE: wasayd
+      DB_USERNAME: wasayd
+      DB_PASSWORD: wasayd_pass_2024
+      REDIS_HOST: redis
+    volumes:
+      - ./src:/var/www/html
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wasayd-net
+
+  # ─── RFID Bridge (Node.js WebSocket service) ──────────────────────────
+  rfid-bridge:
+    build:
+      context: ./rfid-bridge
+      dockerfile: Dockerfile
+    container_name: wasayd-rfid-bridge
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      BRIDGE_PORT: 8765
+      APP_URL: http://app
+      BRIDGE_SECRET: wasayd_rfid_secret_2024
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - wasayd-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8765/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ─── Soketi (self-hosted Pusher WebSocket) ────────────────────────────
+  soketi:
+    image: quay.io/soketi/soketi:latest
+    container_name: wasayd-soketi
+    restart: unless-stopped
+    ports:
+      - "6001:6001"
+    environment:
+      SOKETI_DEFAULT_APP_ID: wasayd
+      SOKETI_DEFAULT_APP_KEY: wasayd_key
+      SOKETI_DEFAULT_APP_SECRET: wasayd_secret
+    networks:
+      - wasayd-net
+
+  # ─── PostgreSQL 16 (ADR-002: PostgreSQL required over MySQL) ──────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: wasayd-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: wasayd
+      POSTGRES_USER: wasayd
+      POSTGRES_PASSWORD: wasayd_pass_2024
+    volumes:
+      - wasayd-postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wasayd -d wasayd"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - wasayd-net
+
+  # ─── Redis (cache, queue, pub/sub, EPC dedup) ─────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: wasayd-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - wasayd-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - wasayd-net
+
+  # ─── MinIO (S3-compatible object storage) ────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: wasayd-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: wasayd_minio
+      MINIO_ROOT_PASSWORD: wasayd_minio_secret_2024
+    command: server /data --console-address ":9001"
+    volumes:
+      - wasayd-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - wasayd-net
+
+  # ─── Gotenberg (PDF rendering) ───────────────────────────────────────
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: wasayd-gotenberg
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - wasayd-net
+
+  # ─── Mailpit (local email testing) ───────────────────────────────────
   mailpit:
     image: axllent/mailpit:latest
     container_name: wasayd-mailpit
@@ -66,26 +250,12 @@ services:
     networks:
       - wasayd-net
 
-  phpmyadmin:
-    image: phpmyadmin:latest
-    container_name: wasayd-phpmyadmin
-    restart: unless-stopped
-    ports:
-      - "8888:80"
-    environment:
-      PMA_HOST: mysql
-      PMA_PORT: 3306
-      PMA_USER: root
-      PMA_PASSWORD: wasayd_root_2024
-    depends_on:
-      - mysql
-    profiles:
-      - tools
-    networks:
-      - wasayd-net
-
 volumes:
-  wasayd-mysql-data:
+  wasayd-postgres-data:
+    driver: local
+  wasayd-redis-data:
+    driver: local
+  wasayd-minio-data:
     driver: local
 
 networks:

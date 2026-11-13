@@ -1,0 +1,21 @@
+{
+  "name": "wasayd-rfid-bridge",
+  "version": "0.1.0",
+  "description": "WASAYD RFID WebSocket bridge — connects RFID readers to the Laravel backend",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "ioredis": "^5.4.2",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.14",
+    "@types/express": "^5.0.3"
+  }
+}
