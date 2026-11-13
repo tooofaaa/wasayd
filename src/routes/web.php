@@ -15,6 +15,7 @@ use App\Http\Controllers\Locations\RackController;
 use App\Http\Controllers\Locations\ShelfController;
 use App\Http\Controllers\Locations\WarehouseController;
 use App\Http\Controllers\Locations\ZoneController;
+use App\Services\TenantContext;
 use Illuminate\Support\Facades\Route;
 
 // Guest routes
@@ -25,6 +26,23 @@ Route::middleware('guest')->group(function () {
 
 // Authenticated routes
 Route::middleware('auth')->group(function () {
+    // Tenant switching — Plan Feature 1.2 (T1.2-C: switching resets warehouse scope)
+    Route::post('/tenant/switch', function (TenantContext $context) {
+        $data = request()->validate([
+            'company_id'   => 'sometimes|integer|exists:companies,id',
+            'warehouse_id' => 'sometimes|integer|exists:warehouses,id',
+        ]);
+
+        if (isset($data['company_id'])) {
+            $context->switchCompany((int) $data['company_id']);
+        }
+        if (isset($data['warehouse_id'])) {
+            $context->switchWarehouse((int) $data['warehouse_id']);
+        }
+
+        return back()->with('success', __('Switched successfully.'));
+    })->name('tenant.switch');
+
     Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
     Route::get('/', fn () => redirect()->route('dashboard'));
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
