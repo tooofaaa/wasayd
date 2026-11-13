@@ -23,6 +23,11 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\EnsureTwoFactorVerified::class, // Plan F1.5: 2FA gate
         ]);
 
+        // Apply tenant RLS scope to all authenticated API requests too
+        $middleware->api(append: [
+            \App\Http\Middleware\TenantScopeMiddleware::class,  // Plan F1.2
+        ]);
+
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,

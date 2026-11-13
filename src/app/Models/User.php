@@ -18,6 +18,7 @@ class User extends Authenticatable
         'company_id', 'branch_id', 'name', 'name_ar', 'email', 'password',
         'phone', 'avatar', 'locale', 'theme', 'is_active',
         'last_login_at', 'last_login_ip',
+        'failed_login_count',
         // Plan Feature 1.5 — TOTP 2FA
         'two_factor_enabled', 'two_factor_secret',
         'two_factor_backup_codes', 'two_factor_confirmed_at',

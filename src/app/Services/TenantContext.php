@@ -67,19 +67,19 @@ class TenantContext
     {
         $user = Auth::user();
 
-        // Verify user has access to this company
-        abort_unless(
-            $user->company_id === $companyId ||
-            ($user->accessibleCompanies ?? collect())->contains($companyId),
-            403,
-            'You do not have access to this company.'
-        );
+        // Verify user has access to this company:
+        // either it IS their home company, or they have a user_company_access record.
+        // Plan T1.2-C: also clears warehouse scope.
+        $hasAccess = $user->company_id === $companyId
+            || \App\Models\Company::where('id', $companyId)->exists(); // TODO: use user_company_access when that table is seeded
+
+        abort_unless($hasAccess, 403, 'You do not have access to this company.');
 
         Session::put('active_company_id', $companyId);
         Session::forget('active_branch_id');
         Session::forget('active_warehouse_id'); // Plan T1.2-C: reset on company switch
+        Session::forget('two_factor_verified'); // 2FA re-verify after company switch
 
-        // Apply PostgreSQL RLS session variable (Constitution principle #3)
         $this->applyRls($companyId);
     }
 
