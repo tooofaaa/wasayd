@@ -15,6 +15,7 @@ use App\Http\Controllers\Locations\RackController;
 use App\Http\Controllers\Locations\ShelfController;
 use App\Http\Controllers\Locations\WarehouseController;
 use App\Http\Controllers\Locations\ZoneController;
+use App\Http\Controllers\Auth\TwoFactorController;
 use App\Services\TenantContext;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +27,15 @@ Route::middleware('guest')->group(function () {
 
 // Authenticated routes
 Route::middleware('auth')->group(function () {
+    // ─── Two-Factor Authentication — Plan Feature 1.5 ────────────────────────
+    Route::prefix('two-factor')->name('two-factor.')->group(function () {
+        Route::get('/challenge', [TwoFactorController::class, 'showChallenge'])->name('challenge');
+        Route::post('/challenge', [TwoFactorController::class, 'verifyChallenge'])->name('verify');
+        Route::get('/setup', [TwoFactorController::class, 'showSetup'])->name('setup');
+        Route::post('/setup/confirm', [TwoFactorController::class, 'confirmSetup'])->name('confirm');
+        Route::delete('/disable', [TwoFactorController::class, 'disable'])->name('disable');
+    });
+
     // Tenant switching — Plan Feature 1.2 (T1.2-C: switching resets warehouse scope)
     Route::post('/tenant/switch', function (TenantContext $context) {
         $data = request()->validate([

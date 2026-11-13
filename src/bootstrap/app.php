@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\HandleInertiaRequests::class,
             \App\Http\Middleware\SetLocale::class,
             \App\Http\Middleware\TenantScopeMiddleware::class,  // Plan F1.2: RLS per request
+            \App\Http\Middleware\EnsureTwoFactorVerified::class, // Plan F1.5: 2FA gate
         ]);
 
         $middleware->alias([
