@@ -1,0 +1,66 @@
+{
+  "name": "WASAYD Medical Inventory Platform",
+  "image": "mcr.microsoft.com/devcontainers/php:8.4-bullseye",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "mounts": [
+    "source=${localWorkspaceFolder}/src,target=/var/www/html,type=bind,consistency=cached"
+  ],
+
+  "forwardPorts": [8000, 5173, 6001, 8765, 6379, 5432],
+  "portsAttributes": {
+    "8000": { "label": "Laravel App", "onAutoForward": "openBrowser" },
+    "5173": { "label": "Vite Dev Server" },
+    "6001": { "label": "Soketi WebSocket" },
+    "8765": { "label": "RFID Bridge" },
+    "6379": { "label": "Redis" },
+    "5432": { "label": "PostgreSQL" }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "bmewburn.vscode-intelephense-client",
+        "Vue.volar",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "mikestead.dotenv",
+        "formulahendry.auto-rename-tag",
+        "GitHub.copilot",
+        "ms-azuretools.vscode-docker",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg"
+      ],
+      "settings": {
+        "php.validate.executablePath": "/usr/local/bin/php",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "[php]": { "editor.defaultFormatter": "bmewburn.vscode-intelephense-client" },
+        "tailwindCSS.includeLanguages": { "vue": "html" },
+        "intelephense.environment.phpVersion": "8.4.0"
+      }
+    }
+  },
+
+  "remoteUser": "vscode",
+
+  "containerEnv": {
+    "DB_CONNECTION": "pgsql",
+    "DB_HOST": "localhost",
+    "DB_PORT": "5432",
+    "DB_DATABASE": "wasayd",
+    "DB_USERNAME": "wasayd",
+    "DB_PASSWORD": "wasayd_pass_2024",
+    "REDIS_HOST": "localhost",
+    "REDIS_PORT": "6379",
+    "APP_ENV": "local",
+    "APP_DEBUG": "true"
+  }
+}
