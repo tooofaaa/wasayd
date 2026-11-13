@@ -9,133 +9,147 @@ use App\Models\InventoryTransaction;
 use App\Models\Item;
 use App\Models\Stock;
 use App\Models\StockBalance;
-use App\Models\Warehouse;
+use App\Services\TenantContext;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Dashboard Controller — WASAYD
+ *
+ * Plan reference: Feature 1.6 — Dashboard Shell + KPI Widgets
+ * Plan T1.6-A: stats.inventory, stats.rfid, stats.transactions groups
+ * Plan T1.6-B: Stats scoped to active warehouse
+ * Constitution principle #3: Tenant-isolated stats
+ * Constitution principle #8: Arabic-first (labels come from i18n, not hardcoded)
+ */
 class DashboardController extends Controller
 {
-    public function index()
-    {
-        $user = auth()->user();
+    public function __construct(private TenantContext $tenantContext) {}
 
-        if (! $user) {
-            return redirect()->route('login')->with('error', 'Please log in to access the dashboard.');
+    public function index(): Response
+    {
+        $user        = auth()->user();
+        $companyId   = $this->tenantContext->getCompanyId();
+        $warehouseId = $this->tenantContext->getWarehouseId();
+
+        // Cache stats for 60s per company + warehouse scope
+        $cacheKey = "dashboard_stats:{$companyId}:" . ($warehouseId ?? 'all');
+
+        $stats = Cache::remember($cacheKey, 60, function () use ($companyId, $warehouseId) {
+            return [
+                'inventory'    => $this->inventoryKpis($companyId, $warehouseId),
+                'rfid'         => $this->rfidKpis($companyId, $warehouseId),
+                'transactions' => $this->transactionKpis($companyId, $warehouseId),
+            ];
+        });
+
+        return Inertia::render('Dashboard/Index', [
+            'stats' => $stats,
+        ]);
+    }
+
+    /**
+     * Inventory KPIs.
+     * Plan: Total Items, Total Stock, Low Stock, Out of Stock, Expiring Soon, Expired.
+     */
+    private function inventoryKpis(int $companyId, ?int $warehouseId): array
+    {
+        $stockQuery = StockBalance::where('company_id', $companyId);
+        if ($warehouseId) {
+            $stockQuery->where('warehouse_id', $warehouseId);
         }
 
-        $companyId = $user->company_id;
+        $totalStockQty = (int) $stockQuery->sum('total_on_hand');
 
-        $totalItems = Item::where('company_id', $companyId)->where('is_active', true)->count();
+        $itemQuery = Item::where('company_id', $companyId)->where('is_active', true);
+        $totalItems = $itemQuery->count();
 
-        $stockValue = Stock::where('stock.company_id', $companyId)
-            ->sum(DB::raw('quantity_on_hand * unit_cost'));
-
-        $lowStockAlerts = DB::table('items')
-            ->join('stock_balances', 'items.id', '=', 'stock_balances.item_id')
-            ->select('items.id')
-            ->where('items.company_id', $companyId)
-            ->where('items.is_active', true)
-            ->where('items.reorder_point', '>', 0)
-            ->whereNull('items.deleted_at')
-            ->groupBy('items.id', 'items.reorder_point')
-            ->havingRaw('SUM(stock_balances.total_available) < items.reorder_point')
-            ->get()
+        // Low stock: on-hand < reorder_point
+        $lowStock = Item::where('company_id', $companyId)
+            ->where('is_active', true)
+            ->where('reorder_point', '>', 0)
+            ->whereHas('stockBalances', function ($q) use ($warehouseId) {
+                $q->when($warehouseId, fn ($q) => $q->where('warehouse_id', $warehouseId))
+                  ->havingRaw('SUM(total_available) < items.reorder_point')
+                  ->groupBy('item_id');
+            })
             ->count();
+
+        $outOfStock = Item::where('company_id', $companyId)
+            ->where('is_active', true)
+            ->whereDoesntHave('stockBalances', fn ($q) =>
+                $q->when($warehouseId, fn ($q) => $q->where('warehouse_id', $warehouseId))
+                  ->where('total_available', '>', 0)
+            )->count();
 
         $expiringSoon = Batch::where('company_id', $companyId)
             ->where('status', 'active')
             ->whereNotNull('expiry_date')
-            ->where('expiry_date', '<=', now()->addDays(30))
             ->where('expiry_date', '>', now())
+            ->where('expiry_date', '<=', now()->addDays(90))
             ->count();
 
-        $activeEpcs = Epc::where('company_id', $companyId)
-            ->whereIn('status', ['active', 'in_use'])
+        $expiredItems = Batch::where('company_id', $companyId)
+            ->where('expiry_date', '<', now())
             ->count();
 
-        $stockByWarehouse = StockBalance::where('stock_balances.company_id', $companyId)
-            ->join('warehouses', 'stock_balances.warehouse_id', '=', 'warehouses.id')
-            ->select('warehouses.name', DB::raw('SUM(total_on_hand) as total'))
-            ->groupBy('warehouses.id', 'warehouses.name')
-            ->orderByDesc('total')
-            ->limit(10)
-            ->get()
-            ->map(fn ($row) => ['name' => $row->name, 'total' => (float) $row->total]);
+        return [
+            'total_items'   => $totalItems,
+            'total_stock'   => $totalStockQty,
+            'low_stock'     => $lowStock,
+            'out_of_stock'  => $outOfStock,
+            'expiring_soon' => $expiringSoon,
+            'expired_items' => $expiredItems,
+        ];
+    }
 
-        $stockByType = Item::where('items.company_id', $companyId)
-            ->where('is_active', true)
-            ->select('item_type', DB::raw('COUNT(*) as count'))
-            ->groupBy('item_type')
-            ->get()
-            ->map(fn ($row) => [
-                'type' => ucfirst(str_replace('_', ' ', $row->item_type instanceof \BackedEnum ? $row->item_type->value : $row->item_type)),
-                'count' => $row->count,
-            ]);
+    /**
+     * RFID KPIs.
+     * Plan: Total EPCs, Encoded, In Stock, Not Found, Location Variance.
+     */
+    private function rfidKpis(int $companyId, ?int $warehouseId): array
+    {
+        $epcQuery = Epc::where('company_id', $companyId);
+        if ($warehouseId) {
+            $epcQuery->where('warehouse_id', $warehouseId);
+        }
 
-        $recentTransactions = InventoryTransaction::where('company_id', $companyId)
-            ->with(['item:id,name,sku'])
-            ->latest('created_at')
-            ->limit(10)
-            ->get()
-            ->map(fn ($txn) => [
-                'id' => $txn->id,
-                'transaction_number' => $txn->transaction_number,
-                'transaction_type' => $txn->transaction_type,
-                'item_name' => $txn->item?->name,
-                'sku' => $txn->item?->sku,
-                'quantity' => $txn->quantity,
-                'created_at' => $txn->created_at->toDateTimeString(),
-            ]);
+        return [
+            'total_epcs'           => (clone $epcQuery)->count(),
+            'encoded_epcs'         => (clone $epcQuery)->where('status', 'encoded')->count(),
+            'epcs_in_stock'        => (clone $epcQuery)->where('status', 'active')->count(),
+            'epcs_not_found'       => (clone $epcQuery)->where('status', 'missing')->count(),
+            'epcs_location_variance' => (clone $epcQuery)->where('status', 'location_variance')->count(),
+        ];
+    }
 
-        $lowStockItems = Item::where('items.company_id', $companyId)
-            ->where('is_active', true)
-            ->where('reorder_point', '>', 0)
-            ->with(['stockBalances' => fn ($q) => $q->select('item_id', DB::raw('SUM(total_available) as available'))->groupBy('item_id')])
-            ->get()
-            ->filter(fn ($item) => ($item->stockBalances->first()?->available ?? 0) < $item->reorder_point)
-            ->take(10)
-            ->map(fn ($item) => [
-                'id' => $item->id,
-                'name' => $item->name,
-                'sku' => $item->sku,
-                'available' => (float) ($item->stockBalances->first()?->available ?? 0),
-                'reorder_point' => $item->reorder_point,
-                'min_stock' => $item->min_stock,
-            ])
-            ->values();
+    /**
+     * Transaction KPIs — today's counts.
+     * Plan: Today's Receipts, Issues, Transfers, Adjustments, Stock Counts.
+     */
+    private function transactionKpis(int $companyId, ?int $warehouseId): array
+    {
+        $today = now()->toDateString();
+        $txQuery = InventoryTransaction::where('company_id', $companyId)
+            ->whereDate('created_at', $today);
 
-        $expiringBatches = Batch::where('company_id', $companyId)
-            ->where('status', 'active')
-            ->whereNotNull('expiry_date')
-            ->where('expiry_date', '<=', now()->addDays(30))
-            ->where('expiry_date', '>', now())
-            ->with('item:id,name,sku')
-            ->orderBy('expiry_date')
-            ->limit(10)
-            ->get()
-            ->map(fn ($batch) => [
-                'id' => $batch->id,
-                'batch_number' => $batch->batch_number,
-                'item_name' => $batch->item?->name,
-                'sku' => $batch->item?->sku,
-                'expiry_date' => $batch->expiry_date->toDateString(),
-                'days_remaining' => (int) now()->diffInDays($batch->expiry_date, false),
-            ]);
+        if ($warehouseId) {
+            $txQuery->where('warehouse_id', $warehouseId);
+        }
 
-        return Inertia::render('Dashboard/Index', [
-            'stats' => [
-                'totalItems' => $totalItems,
-                'stockValue' => round((float) $stockValue, 2),
-                'lowStockAlerts' => $lowStockAlerts,
-                'expiringSoon' => $expiringSoon,
-                'activeEpcs' => $activeEpcs,
-            ],
-            'stockByWarehouse' => $stockByWarehouse,
-            'stockByType' => $stockByType,
-            'recentTransactions' => $recentTransactions,
-            'lowStockItems' => $lowStockItems,
-            'expiringBatches' => $expiringBatches,
-        ]);
+        $typeCounts = (clone $txQuery)
+            ->select('transaction_type', DB::raw('COUNT(*) as count'))
+            ->groupBy('transaction_type')
+            ->pluck('count', 'transaction_type');
+
+        return [
+            'today_receipts'    => (int) ($typeCounts['receiving'] ?? 0),
+            'today_issues'      => (int) ($typeCounts['issue'] ?? 0),
+            'today_transfers'   => (int) ($typeCounts['transfer_out'] ?? 0),
+            'today_adjustments' => (int) ($typeCounts['adjustment'] ?? 0),
+            'today_counts'      => (int) ($typeCounts['stock_count'] ?? 0),
+        ];
     }
 }
