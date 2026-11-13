@@ -1,7 +1,6 @@
 #!/bin/bash
 # WASAYD Deploy Script — triggered by GitHub webhook on push to main
 # Plan reference: CI/CD Pipeline setup
-# Called by: webhook service when GitHub sends push event
 
 set -e
 
@@ -16,14 +15,15 @@ echo "========================================" >> "$LOG_FILE"
 
 cd "$DEPLOY_PATH"
 
-echo "▶ Pulling latest code from GitHub..." | tee -a "$LOG_FILE"
+echo "▶ Pulling latest code..." | tee -a "$LOG_FILE"
 git fetch origin main >> "$LOG_FILE" 2>&1
 git reset --hard origin/main >> "$LOG_FILE" 2>&1
 COMMIT=$(git log -1 --pretty='%h %s' | head -c 80)
 echo "   Commit: $COMMIT" | tee -a "$LOG_FILE"
 
-echo "▶ Reloading Docker Compose services..." | tee -a "$LOG_FILE"
-docker compose up -d --remove-orphans >> "$LOG_FILE" 2>&1
+echo "▶ Starting core services (skip optional ones)..." | tee -a "$LOG_FILE"
+docker compose up -d app nginx postgres redis soketi queue queue-rfid scheduler \
+  2>&1 >> "$LOG_FILE" || true
 
 echo "▶ Waiting for PostgreSQL..." | tee -a "$LOG_FILE"
 for i in $(seq 1 20); do
@@ -35,7 +35,7 @@ echo "   PostgreSQL ready" | tee -a "$LOG_FILE"
 echo "▶ Running migrations..." | tee -a "$LOG_FILE"
 docker exec wasayd-app php artisan migrate --force --no-interaction >> "$LOG_FILE" 2>&1
 
-echo "▶ Seeding roles/permissions..." | tee -a "$LOG_FILE"
+echo "▶ Seeding roles/permissions (if new)..." | tee -a "$LOG_FILE"
 docker exec wasayd-app php artisan db:seed --class=RolesAndPermissionsSeeder --force --no-interaction >> "$LOG_FILE" 2>&1 || true
 
 echo "▶ Building frontend assets..." | tee -a "$LOG_FILE"
@@ -57,5 +57,3 @@ echo "" | tee -a "$LOG_FILE"
 echo "✅ Deploy complete: $FINISH" | tee -a "$LOG_FILE"
 echo "🌐 http://app.ahmedelqadi.me" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
-
-exit 0
