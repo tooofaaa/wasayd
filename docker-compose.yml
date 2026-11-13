@@ -1,14 +1,13 @@
 services:
   # ─── Laravel PHP-FPM ──────────────────────────────────────────────────
   app:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
+    image: wasayd-app:with-pgsql
     container_name: wasayd-app
     restart: unless-stopped
     working_dir: /var/www/html
     environment:
-      APP_ENV: local
+      APP_ENV: production
+      APP_URL: https://app.ahmedelqadi.me
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: 5432
@@ -52,9 +51,7 @@ services:
 
   # ─── Queue workers ────────────────────────────────────────────────────
   queue:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
+    image: wasayd-app:with-pgsql
     container_name: wasayd-queue
     restart: unless-stopped
     working_dir: /var/www/html
@@ -77,9 +74,7 @@ services:
       - wasayd-net
 
   queue-rfid:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
+    image: wasayd-app:with-pgsql
     container_name: wasayd-queue-rfid
     restart: unless-stopped
     working_dir: /var/www/html
@@ -103,9 +98,7 @@ services:
 
   # ─── Scheduler ────────────────────────────────────────────────────────
   scheduler:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
+    image: wasayd-app:with-pgsql
     container_name: wasayd-scheduler
     restart: unless-stopped
     working_dir: /var/www/html
@@ -172,7 +165,7 @@ services:
     container_name: wasayd-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_DB: wasayd
       POSTGRES_USER: wasayd
@@ -195,7 +188,7 @@ services:
     container_name: wasayd-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - wasayd-redis-data:/data
@@ -209,7 +202,7 @@ services:
 
   # ─── MinIO (S3-compatible object storage) ────────────────────────────
   minio:
-    image: minio/minio:latest
+    image: docker.io/bitnami/minio:latest
     container_name: wasayd-minio
     restart: unless-stopped
     ports:

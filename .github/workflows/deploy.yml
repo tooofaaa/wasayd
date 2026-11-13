@@ -1,0 +1,96 @@
+name: Deploy to app.ahmedelqadi.me
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Manual deploy reason"
+        required: false
+        default: "Manual trigger"
+
+jobs:
+  deploy:
+    name: Deploy WASAYD to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config << 'EOF'
+          Host deploy-target
+            HostName ${{ secrets.DEPLOY_HOST }}
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ServerAliveInterval 30
+          EOF
+
+      - name: Deploy
+        run: |
+          ssh deploy-target 'bash -s' << 'ENDSSH'
+            set -e
+            echo "🚀 Starting WASAYD deploy — $(date)"
+            cd /home/ubuntu/wasayd
+
+            echo "▶ Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "▶ Starting/updating services..."
+            docker compose up -d --remove-orphans
+
+            echo "▶ Waiting for PostgreSQL..."
+            for i in $(seq 1 30); do
+              docker exec wasayd-postgres pg_isready -U wasayd -d wasayd >/dev/null 2>&1 && break
+              sleep 2
+            done
+
+            echo "▶ Running migrations..."
+            docker exec wasayd-app php artisan migrate --force --no-interaction
+
+            echo "▶ Seeding roles and permissions..."
+            docker exec wasayd-app php artisan db:seed --class=RolesAndPermissionsSeeder --force --no-interaction 2>/dev/null || true
+
+            echo "▶ Building frontend assets..."
+            cd src && npm ci --legacy-peer-deps --silent 2>/dev/null || npm install --legacy-peer-deps --silent
+            npm run build
+            cd ..
+
+            echo "▶ Caching config..."
+            docker exec wasayd-app php artisan config:cache
+            docker exec wasayd-app php artisan route:cache
+            docker exec wasayd-app php artisan view:cache
+
+            echo "▶ Restarting queue workers..."
+            docker compose restart queue queue-rfid scheduler
+
+            echo "✅ Deploy complete — $(date)"
+            echo "🌐 Live at: http://app.ahmedelqadi.me"
+          ENDSSH
+
+      - name: Health Check
+        run: |
+          sleep 15
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 http://app.ahmedelqadi.me/api/health || echo "000")
+          echo "Health check: HTTP $STATUS"
+          [ "$STATUS" = "200" ] || [ "$STATUS" = "503" ] && echo "✅ App responding" || echo "⚠️ Unexpected status"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 🚀 WASAYD Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Live URL | http://app.ahmedelqadi.me |" >> $GITHUB_STEP_SUMMARY
