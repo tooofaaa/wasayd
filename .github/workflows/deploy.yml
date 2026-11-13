@@ -17,56 +17,52 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      # ─── 1. Checkout ──────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
-          cat >> ~/.ssh/config << 'EOF'
-          Host deploy-target
-            HostName ${{ secrets.DEPLOY_HOST }}
-            User ${{ secrets.DEPLOY_USER }}
-            IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking no
-            ServerAliveInterval 30
-          EOF
-
-      - name: Deploy
-        run: |
-          ssh deploy-target 'bash -s' << 'ENDSSH'
+      # ─── 2. Deploy via SSH (appleboy/ssh-action) ──────────────────────────
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 22
+          timeout: 15m
+          command_timeout: 15m
+          script: |
             set -e
-            echo "🚀 Starting WASAYD deploy — $(date)"
-            cd /home/ubuntu/wasayd
+            echo "🚀 WASAYD deploy started — $(date)"
+            cd ${{ secrets.DEPLOY_PATH }}
 
-            echo "▶ Pulling latest code..."
+            echo "▶ Pulling latest code from GitHub..."
             git fetch origin main
             git reset --hard origin/main
 
-            echo "▶ Starting/updating services..."
+            echo "▶ Starting/updating Docker services..."
             docker compose up -d --remove-orphans
 
-            echo "▶ Waiting for PostgreSQL..."
+            echo "▶ Waiting for PostgreSQL to be ready..."
             for i in $(seq 1 30); do
-              docker exec wasayd-postgres pg_isready -U wasayd -d wasayd >/dev/null 2>&1 && break
+              docker exec wasayd-postgres pg_isready -U wasayd -d wasayd > /dev/null 2>&1 && echo "PostgreSQL ready" && break
+              echo "  Waiting... ($i/30)"
               sleep 2
             done
 
-            echo "▶ Running migrations..."
+            echo "▶ Running database migrations..."
             docker exec wasayd-app php artisan migrate --force --no-interaction
 
             echo "▶ Seeding roles and permissions..."
             docker exec wasayd-app php artisan db:seed --class=RolesAndPermissionsSeeder --force --no-interaction 2>/dev/null || true
 
             echo "▶ Building frontend assets..."
-            cd src && npm ci --legacy-peer-deps --silent 2>/dev/null || npm install --legacy-peer-deps --silent
+            cd src
+            npm ci --legacy-peer-deps --silent 2>/dev/null || npm install --legacy-peer-deps --silent
             npm run build
             cd ..
 
-            echo "▶ Caching config..."
+            echo "▶ Caching Laravel config..."
             docker exec wasayd-app php artisan config:cache
             docker exec wasayd-app php artisan route:cache
             docker exec wasayd-app php artisan view:cache
@@ -74,23 +70,33 @@ jobs:
             echo "▶ Restarting queue workers..."
             docker compose restart queue queue-rfid scheduler
 
+            echo ""
             echo "✅ Deploy complete — $(date)"
-            echo "🌐 Live at: http://app.ahmedelqadi.me"
-          ENDSSH
+            echo "🌐 http://app.ahmedelqadi.me"
 
+      # ─── 3. Health check ──────────────────────────────────────────────────
       - name: Health Check
         run: |
+          echo "Waiting 15s for app to stabilize..."
           sleep 15
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 http://app.ahmedelqadi.me/api/health || echo "000")
-          echo "Health check: HTTP $STATUS"
-          [ "$STATUS" = "200" ] || [ "$STATUS" = "503" ] && echo "✅ App responding" || echo "⚠️ Unexpected status"
+          echo "Health: HTTP $STATUS"
+          if [ "$STATUS" = "200" ] || [ "$STATUS" = "503" ]; then
+            echo "✅ App is responding at http://app.ahmedelqadi.me"
+          else
+            echo "⚠️ Unexpected status: $STATUS — check the server logs"
+          fi
 
+      # ─── 4. Summary ───────────────────────────────────────────────────────
       - name: Summary
         if: always()
         run: |
           echo "## 🚀 WASAYD Deploy" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Live URL | http://app.ahmedelqadi.me |" >> $GITHUB_STEP_SUMMARY
+          echo "| Actions URL | ${{ github.server_url }}/${{ github.repository }}/actions |" >> $GITHUB_STEP_SUMMARY
