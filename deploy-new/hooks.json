@@ -1,0 +1,32 @@
+[
+  {
+    "id": "wasayd-new-deploy",
+    "execute-command": "/home/ubuntu/wasayd/deploy-new/deploy.sh",
+    "command-working-directory": "/home/ubuntu/wasayd new",
+    "response-message": "Deploy triggered for wasayd-new (new.ahmedelqadi.me)",
+    "trigger-rule": {
+      "and": [
+        {
+          "match": {
+            "type": "payload-hmac-sha256",
+            "secret": "eec306f507269715335df16ed27451848f77b13d43ac528129166c8da84edc4d",
+            "parameter": {
+              "source": "header",
+              "name": "X-Hub-Signature-256"
+            }
+          }
+        },
+        {
+          "match": {
+            "type": "value",
+            "value": "refs/heads/main",
+            "parameter": {
+              "source": "payload",
+              "name": "ref"
+            }
+          }
+        }
+      ]
+    }
+  }
+]
